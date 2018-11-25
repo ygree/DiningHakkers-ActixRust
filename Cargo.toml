@@ -1,0 +1,8 @@
+[package]
+name = "actors"
+version = "0.1.0"
+authors = ["Yury Gribkov <yury.gribkov@gmail.com>"]
+
+[dependencies]
+actix = "0.7.7"
+futures = "0.1.25"
