@@ -22,6 +22,7 @@ enum ChopstickMessage {
     Put(Addr<Hakker>),
 }
 
+#[derive(Debug)]
 enum ChopstickAnswer {
     Taken,
     Busy,
@@ -38,24 +39,21 @@ impl Handler<ChopstickMessage> for Chopstick {
             // But the owning hakker can put it back
             Chopstick::TakenBy(ref hakker) => match msg {
                 ChopstickMessage::Take(_) => (None, ChopstickAnswer::Busy),
-                ChopstickMessage::Put(sender) => {
-                    if sender == *hakker {
-                        (Some(Chopstick::Available), ChopstickAnswer::PutBack)
-                    } else {
-                        (None, ChopstickAnswer::Busy)
-                    }
+                ChopstickMessage::Put(ref sender) if sender == hakker => {
+                    (Some(Chopstick::Available), ChopstickAnswer::PutBack)
                 }
+                _ => unimplemented!("Can't be put back by another hakker"),
             },
             // When a Chopstick is available, it can be taken by a hakker
             Chopstick::Available => match msg {
                 ChopstickMessage::Take(hakker) => {
                     (Some(Chopstick::TakenBy(hakker)), ChopstickAnswer::Taken)
                 }
-                ChopstickMessage::Put(_) => (None, ChopstickAnswer::Busy),
+                _ => unimplemented!("It's not taken"),
             },
         };
-        if let Some(new_state) = new_state {
-            *self = new_state;
+        if let Some(ns) = new_state {
+            *self = ns;
         }
         result
     }
@@ -121,6 +119,22 @@ impl Actor for Hakker {
 
 fn main() {
     let system = actix::System::new("test");
+
+    let chopstick = Chopstick::Available.start();
+    let hakker = Hakker.start();
+
+    // let resp = chopstick.send(ChopstickMessage::Put(hakker));
+    let resp = chopstick.send(ChopstickMessage::Take(hakker));
+
+    Arbiter::spawn(resp.then(|resp| {
+        match resp {
+            Ok(r) => println!("resp: {:?}", r),
+            _ => println!("error")
+        }
+        
+        System::current().stop();
+        future::result(Ok(()))
+    }));
 
     // let addr = Summator(0).start();
 
