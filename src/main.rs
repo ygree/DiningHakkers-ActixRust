@@ -6,9 +6,7 @@ use actix::dev::ResponseChannel;
 use actix::{msgs, Actor, Addr, Arbiter, Context, Handler, Message, Recipient, System};
 use futures::{future, Future};
 
-struct Chopstick(ChopstickState);
-
-enum ChopstickState {
+enum Chopstick {
     Available,
     TakenBy(Addr<Hakker>),
 }
@@ -34,39 +32,31 @@ impl Handler<ChopstickMessage> for Chopstick {
     type Result = ChopstickAnswer;
 
     fn handle(&mut self, msg: ChopstickMessage, ctx: &mut Self::Context) -> Self::Result {
-        // let state = &mut self.0;
-        let (new_state, result) = match self.0 {
+        let (new_state, result) = match self {
             // When a Chopstick is taken by a hakker
             // It will refuse to be taken by other hakkers
             // But the owning hakker can put it back
-            ChopstickState::TakenBy(ref hakker) => match msg {
+            Chopstick::TakenBy(ref hakker) => match msg {
                 ChopstickMessage::Take(_) => (None, ChopstickAnswer::Busy),
                 ChopstickMessage::Put(sender) => {
-                    if sender == *hakker { //TODO: we only need hakker here, but it prevents us from changing the state 
-                        // self.0 = ChopstickState::Available;
-                        // *state = ChopstickState::Available; //TODO can't set it here because we borrowed part of it in `hakker`
-                        (Some(ChopstickState::Available), ChopstickAnswer::PutBack)
+                    if sender == *hakker {
+                        (Some(Chopstick::Available), ChopstickAnswer::PutBack)
                     } else {
                         (None, ChopstickAnswer::Busy)
                     }
                 }
             },
             // When a Chopstick is available, it can be taken by a hakker
-            ChopstickState::Available => match msg {
+            Chopstick::Available => match msg {
                 ChopstickMessage::Take(hakker) => {
-                    //                    *state = ChopstickState::TakenBy(hakker);
-                    (
-                        Some(ChopstickState::TakenBy(hakker)),
-                        ChopstickAnswer::Taken,
-                    )
+                    (Some(Chopstick::TakenBy(hakker)), ChopstickAnswer::Taken)
                 }
-                _ => (None, ChopstickAnswer::Busy),
+                ChopstickMessage::Put(_) => (None, ChopstickAnswer::Busy),
             },
         };
         if let Some(new_state) = new_state {
-            self.0 = new_state;
+            *self = new_state;
         }
-        // state = newstate;
         result
     }
 }
