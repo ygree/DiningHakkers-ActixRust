@@ -91,8 +91,12 @@ enum HakkerState {
     Waiting,
     Thinking,
     Hungry,
-    WaitingForOtherChopstick(Addr<Chopstick>),
+    WaitingForOtherChopstick {
+        waiting_on: Addr<Chopstick>,
+        taken: Addr<Chopstick>,
+    },
     Eating,
+    FirstChopstickDenied,
 }
 
 impl Actor for Hakker {
@@ -118,24 +122,64 @@ impl Handler<ChopstickAnswer> for Hakker {
                     } else {
                         unreachable!("Received unknown chopstick: {:?}", chopstick)
                     };
-                    println!("taken first chopstick: {:?}", chopstick);
-                    Some(HakkerState::WaitingForOtherChopstick(waiting_on))
+                    // println!("taken first chopstick: {:?}", chopstick);
+                    println!("taken first chopstick: <chopstick>");
+                    Some(HakkerState::WaitingForOtherChopstick {
+                        waiting_on,
+                        taken: chopstick,
+                    })
                 }
-                _ => unimplemented!("TODO"),
+                ChopstickAnswer::Busy => Some(HakkerState::FirstChopstickDenied),
+                _ => unreachable!("Unexpected message in state Hungry"),
             },
-            HakkerState::WaitingForOtherChopstick(ref waiting_on) => match msg {
+            // When a hakker is waiting for the last chopstick it can either obtain it
+            // and start eating, or the other chopstick was busy, and the hakker goes
+            // back to think about how he should obtain his chopsticks :-)
+            HakkerState::WaitingForOtherChopstick {
+                ref waiting_on,
+                ref taken,
+            } => match msg {
                 ChopstickAnswer::Taken(ref chopstick) if waiting_on == chopstick => {
                     println!(
-                        "{} has picked up {:?} and {:?} and starts to eat",
-                        self.name, self.left, self.right
+                        "{} has picked up <chopstick> and <chopstick> and starts to eat",
+                        self.name
                     );
+                    // println!(
+                    //     "{} has picked up {:?} and {:?} and starts to eat",
+                    //     self.name, self.left, self.right
+                    // );
 
                     let five_seconds = Duration::new(5, 0);
                     ctx.notify_later(HakkerMessage::Think, five_seconds);
 
                     Some(HakkerState::Eating)
                 }
-                _ => unimplemented!("TODO"),
+                ChopstickAnswer::Busy => {
+                    taken.do_send(ChopstickMessage::Put(ctx.address()));
+
+                    let ten_seconds = Duration::new(10, 0);
+                    ctx.notify_later(HakkerMessage::Eat, ten_seconds);
+                    Some(HakkerState::Thinking)
+                }
+                _ => unreachable!("Unexpected message in state WaitingForOtherChopstick"),
+            },
+            // When the results of the other grab comes back,
+            // he needs to put it back if he got the other one.
+            // Then go back and think and try to grab the chopsticks again
+            HakkerState::FirstChopstickDenied => match msg {
+                ChopstickAnswer::Busy => {
+                    let ten_seconds = Duration::new(10, 0);
+                    ctx.notify_later(HakkerMessage::Eat, ten_seconds);
+                    Some(HakkerState::Thinking)
+                }
+                ChopstickAnswer::Taken(chopstick) => {
+                    chopstick.do_send(ChopstickMessage::Put(ctx.address()));
+
+                    let ten_seconds = Duration::new(10, 0);
+                    ctx.notify_later(HakkerMessage::Eat, ten_seconds);
+                    Some(HakkerState::Thinking)
+                }
+                _ => unreachable!("Unexpected message in state FirstChopstickDenied"),
             },
             _ => unimplemented!("TODO"),
         };
@@ -174,7 +218,7 @@ impl Handler<HakkerMessage> for Hakker {
                         .then(|res, act, ctx| {
                             match res {
                                 Ok(m) => {
-                                    println!("getting response from the left chopstick: {:?}", m);
+                                    // println!("getting response from the left chopstick: {:?}", m);
                                     ctx.address()
                                         .send(m)
                                         .into_actor(act)
@@ -189,7 +233,7 @@ impl Handler<HakkerMessage> for Hakker {
                         .then(|res, act, ctx| {
                             match res {
                                 Ok(m) => {
-                                    println!("getting response from the right chopstick: {:?}", m);
+                                    // println!("getting response from the right chopstick: {:?}", m);
                                     ctx.address()
                                         .send(m)
                                         .into_actor(act)
@@ -201,14 +245,14 @@ impl Handler<HakkerMessage> for Hakker {
 
                     (Some(HakkerState::Hungry), ())
                 }
-                _ => unreachable!("When thinking hakker can only start eating, not thinking!")
+                _ => unreachable!("When thinking hakker can only start eating, not thinking!"),
             },
             // When a hakker is eating, he can decide to start to think,
             // then he puts down his chopsticks and starts to think
             HakkerState::Eating => match msg {
                 HakkerMessage::Think => {
                     println!("{} puts down his chopsticks and starts to think", self.name);
-                    
+
                     self.left.do_send(ChopstickMessage::Put(ctx.address())); //TODO: is do_send the best option here? is it blocking?
                     self.right.do_send(ChopstickMessage::Put(ctx.address()));
 
@@ -216,11 +260,12 @@ impl Handler<HakkerMessage> for Hakker {
                     ctx.notify_later(HakkerMessage::Eat, five_seconds);
                     (Some(HakkerState::Thinking), ())
                 }
-                HakkerMessage::Eat => unreachable!("When eating hakker can only start thinking, not eating!")
+                HakkerMessage::Eat => {
+                    unreachable!("When eating hakker can only start thinking, not eating!")
+                }
+            },
 
-            }
-
-            _ => unimplemented!(), //TODO
+            _ => unreachable!("Unexpected state"),
         };
         if let Some(ns) = new_state {
             self.state = ns;
@@ -232,54 +277,6 @@ impl Handler<HakkerMessage> for Hakker {
 impl Message for HakkerMessage {
     type Result = (); //TODO
 }
-
-// impl<A, M> MessageResponse<A, M> for ChopstickAnswer
-// where
-//     A: Actor,
-//     M: Message<Result = ChopstickAnswer>,
-// {
-//     fn handle<R: ResponseChannel<M>>(self, ctx: &mut <A as Actor>::Context, tx: Option<R>) {
-//         if let Some(tx) = tx {
-//             tx.send(self);
-//         }
-//     }
-// }
-
-// struct Ping;
-
-// #[derive(Debug)]
-// struct Pong;
-
-// impl Message for Ping {
-//     type Result = Pong;
-// }
-
-// struct Summator(usize);
-
-// impl Actor for Summator {
-//     type Context = Context<Self>;
-// }
-
-// impl <A, M> MessageResponse<A, M> for Pong
-// where
-//     A: Actor,
-//     M: Message<Result = Pong>,
-// {
-//     fn handle<R: ResponseChannel<M>>(self, ctx: &mut <A as Actor>::Context, tx: Option<R>) {
-//         if let Some(tx) = tx {
-//             tx.send(self);
-//         }
-//     }
-// }
-
-// impl Handler<Ping> for Summator {
-//     type Result = Pong; //TODO how it knows it should be Pong? How does it see Message::Result for Ping
-
-//     fn handle(&mut self, msg: Ping, ctx: &mut Context<Self>) -> Self::Result {
-//         self.0 += 1;
-//         Pong
-//     }
-// }
 
 fn main() {
     let system = actix::System::new("test");
@@ -295,9 +292,6 @@ fn main() {
 
     let req = hakker.send(HakkerMessage::Think);
 
-    // let resp = chopstick.send(ChopstickMessage::Put(hakker));
-    // let resp = chopstick1.send(ChopstickMessage::Take(hakker.clone()));
-
     Arbiter::spawn(req.then(|resp| {
         match resp {
             Ok(r) => println!("resp: {:?}", r),
@@ -307,20 +301,6 @@ fn main() {
         // System::current().stop();
         future::result(Ok(()))
     }));
-
-    // let addr = Summator(0).start();
-
-    // let res = addr.send(Ping);
-
-    // Arbiter::spawn(res.then(|r| {
-    //     match r {
-    //         Ok(result) => println!("SUM: {:?}", result),
-    //         _ => println!("Something went wrong!"),
-    //     }
-
-    //     System::current().stop();
-    //     future::result(Ok(()))
-    // }));
 
     system.run();
 }
