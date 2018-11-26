@@ -3,7 +3,7 @@ extern crate futures;
 
 use actix::dev::*;
 // use actix::prelude::*;
-use futures::{future, Future};
+// use futures::{future, Future};
 use std::time::Duration;
 // use std::fmt::Error;
 
@@ -123,7 +123,6 @@ impl Handler<ChopstickAnswer> for Hakker {
                         unreachable!("Received unknown chopstick: {:?}", chopstick)
                     };
                     // println!("taken first chopstick: {:?}", chopstick);
-                    println!("taken first chopstick: <chopstick>");
                     Some(HakkerState::WaitingForOtherChopstick {
                         waiting_on,
                         taken: chopstick,
@@ -211,7 +210,6 @@ impl Handler<HakkerMessage> for Hakker {
             // and try to pick up its chopsticks and eat
             HakkerState::Thinking => match msg {
                 HakkerMessage::Eat => {
-                    println!("start eating");
                     self.left
                         .send(ChopstickMessage::Take(ctx.address()))
                         .into_actor(self)
@@ -281,26 +279,20 @@ impl Message for HakkerMessage {
 fn main() {
     let system = actix::System::new("test");
 
-    let chopstick1 = Chopstick::Available.start();
-    let chopstick2 = Chopstick::Available.start();
-    let hakker = Hakker {
-        name: "Yury".to_owned(),
-        left: chopstick1.clone(),
-        right: chopstick2.clone(),
-        state: HakkerState::Waiting,
-    }.start();
+    let chopsticks: Vec<_> = (1..=5).map(|_| Chopstick::Available.start()).collect();
 
-    let req = hakker.send(HakkerMessage::Think);
+    let hakkers = ["Ghosh", "Boner", "Klang", "Krasser", "Manie"];
 
-    Arbiter::spawn(req.then(|resp| {
-        match resp {
-            Ok(r) => println!("resp: {:?}", r),
-            _ => println!("error"),
-        }
+    for i in 0..5 {
+        let hakker = Hakker {
+            name: hakkers[i].to_owned(),
+            left: chopsticks[i].clone(),
+            right: chopsticks[(i + 1) % 5].clone(),
+            state: HakkerState::Waiting,
+        }.start();
 
-        // System::current().stop();
-        future::result(Ok(()))
-    }));
+        hakker.do_send(HakkerMessage::Think);
+    }
 
     system.run();
 }
