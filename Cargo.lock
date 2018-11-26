@@ -1,4 +1,12 @@
 [[package]]
+name = "DiningHakkers"
+version = "0.1.0"
+dependencies = [
+ "actix 0.7.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures 0.1.25 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "actix"
 version = "0.7.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -35,14 +43,6 @@ dependencies = [
  "proc-macro2 0.4.24 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 0.6.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "syn 0.15.21 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "actors"
-version = "0.1.0"
-dependencies = [
- "actix 0.7.7 (registry+https://github.com/rust-lang/crates.io-index)",
- "futures 0.1.25 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
