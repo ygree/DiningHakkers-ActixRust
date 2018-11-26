@@ -108,9 +108,9 @@ impl Handler<ChopstickAnswer> for Hakker {
     type Result = ();
 
     fn handle(&mut self, msg: ChopstickAnswer, ctx: &mut Self::Context) -> Self::Result {
-        let new_state = match msg {
-            ChopstickAnswer::Taken(chopstick) => match self.state {
-                HakkerState::Hungry => {
+        let new_state = match self.state {
+            HakkerState::Hungry => match msg {
+                ChopstickAnswer::Taken(chopstick) => {
                     let waiting_on = if self.left == chopstick {
                         self.right.clone()
                     } else if self.right == chopstick {
@@ -120,9 +120,15 @@ impl Handler<ChopstickAnswer> for Hakker {
                     };
                     println!("taken first chopstick: {:?}", chopstick);
                     Some(HakkerState::WaitingForOtherChopstick(waiting_on))
-                },
-                HakkerState::WaitingForOtherChopstick(ref waiting_on) if waiting_on == &chopstick => {
-                    println!("{} has picked up {:?} and {:?} and starts to eat", self.name, self.left, self.right);
+                }
+                _ => unimplemented!("TODO"),
+            },
+            HakkerState::WaitingForOtherChopstick(ref waiting_on) => match msg {
+                ChopstickAnswer::Taken(ref chopstick) if waiting_on == chopstick => {
+                    println!(
+                        "{} has picked up {:?} and {:?} and starts to eat",
+                        self.name, self.left, self.right
+                    );
 
                     let five_seconds = Duration::new(5, 0);
                     ctx.notify_later(HakkerMessage::Think, five_seconds);
@@ -131,7 +137,6 @@ impl Handler<ChopstickAnswer> for Hakker {
                 }
                 _ => unimplemented!("TODO"),
             },
-            ChopstickAnswer::Busy => unimplemented!("TODO"),
             _ => unimplemented!("TODO"),
         };
         if let Some(ns) = new_state {
@@ -156,7 +161,7 @@ impl Handler<HakkerMessage> for Hakker {
                     ctx.notify_later(HakkerMessage::Eat, five_seconds);
                     (Some(HakkerState::Thinking), ())
                 }
-                _ => unreachable!("From waiting state Hakker can only start to think."),
+                _ => unreachable!("When waiting state Hakker can only start thinking."),
             },
             // When a hakker is thinking it can become hungry
             // and try to pick up its chopsticks and eat
@@ -196,12 +201,24 @@ impl Handler<HakkerMessage> for Hakker {
 
                     (Some(HakkerState::Hungry), ())
                 }
-                _ => unimplemented!("In thinking mode it can only handle Eat messag"),
+                _ => unreachable!("When thinking hakker can only start eating, not thinking!")
             },
+            // When a hakker is eating, he can decide to start to think,
+            // then he puts down his chopsticks and starts to think
+            HakkerState::Eating => match msg {
+                HakkerMessage::Think => {
+                    println!("{} puts down his chopsticks and starts to think", self.name);
+                    
+                    self.left.do_send(ChopstickMessage::Put(ctx.address())); //TODO: is do_send the best option here? is it blocking?
+                    self.right.do_send(ChopstickMessage::Put(ctx.address()));
 
-            HakkerState::Eating => {
-                unimplemented!("TODO: eating when receive Think put back chopsticks and start thinking")
-            },
+                    let five_seconds = Duration::new(5, 0);
+                    ctx.notify_later(HakkerMessage::Eat, five_seconds);
+                    (Some(HakkerState::Thinking), ())
+                }
+                HakkerMessage::Eat => unreachable!("When eating hakker can only start thinking, not eating!")
+
+            }
 
             _ => unimplemented!(), //TODO
         };
