@@ -1,11 +1,26 @@
 extern crate actix;
 extern crate futures;
+extern crate rand;
 
 use actix::dev::*;
 // use actix::prelude::*;
 // use futures::{future, Future};
 use std::time::Duration;
 // use std::fmt::Error;
+
+fn five_seconds() -> Duration {
+//    Duration::new(5u64 + rand::random::<u64>() % 5, 0)
+    Duration::new(5, 0)
+//    Duration::new(0, 500_000_000)
+//    Duration::new(5, 0) / 10
+}
+
+fn ten_seconds() -> Duration {
+//    Duration::new(10u64 + rand::random::<u64>() % 10, 0)
+    Duration::new(10, 0)
+//    Duration::new(0, 1_000_000_000)
+//    Duration::new(10, 0) / 10
+}
 
 #[derive(Debug)]
 enum Chopstick {
@@ -148,16 +163,14 @@ impl Handler<ChopstickAnswer> for Hakker {
                     //     self.name, self.left, self.right
                     // );
 
-                    let five_seconds = Duration::new(5, 0);
-                    ctx.notify_later(HakkerMessage::Think, five_seconds);
+                    ctx.notify_later(HakkerMessage::Think, five_seconds());
 
                     Some(HakkerState::Eating)
                 }
                 ChopstickAnswer::Busy => {
                     taken.do_send(ChopstickMessage::Put(ctx.address()));
 
-                    let ten_seconds = Duration::new(10, 0);
-                    ctx.notify_later(HakkerMessage::Eat, ten_seconds);
+                    ctx.notify_later(HakkerMessage::Eat, ten_seconds());
                     Some(HakkerState::Thinking)
                 }
                 _ => unreachable!("Unexpected message in state WaitingForOtherChopstick"),
@@ -167,15 +180,13 @@ impl Handler<ChopstickAnswer> for Hakker {
             // Then go back and think and try to grab the chopsticks again
             HakkerState::FirstChopstickDenied => match msg {
                 ChopstickAnswer::Busy => {
-                    let ten_seconds = Duration::new(10, 0);
-                    ctx.notify_later(HakkerMessage::Eat, ten_seconds);
+                    ctx.notify_later(HakkerMessage::Eat, ten_seconds());
                     Some(HakkerState::Thinking)
                 }
                 ChopstickAnswer::Taken(chopstick) => {
                     chopstick.do_send(ChopstickMessage::Put(ctx.address()));
 
-                    let ten_seconds = Duration::new(10, 0);
-                    ctx.notify_later(HakkerMessage::Eat, ten_seconds);
+                    ctx.notify_later(HakkerMessage::Eat, ten_seconds());
                     Some(HakkerState::Thinking)
                 }
                 _ => unreachable!("Unexpected message in state FirstChopstickDenied"),
@@ -200,8 +211,7 @@ impl Handler<HakkerMessage> for Hakker {
             HakkerState::Waiting => match msg {
                 HakkerMessage::Think => {
                     println!("{} starts to think", self.name);
-                    let five_seconds = Duration::new(5, 0);
-                    ctx.notify_later(HakkerMessage::Eat, five_seconds);
+                    ctx.notify_later(HakkerMessage::Eat, five_seconds());
                     (Some(HakkerState::Thinking), ())
                 }
                 _ => unreachable!("When waiting state Hakker can only start thinking."),
@@ -254,8 +264,7 @@ impl Handler<HakkerMessage> for Hakker {
                     self.left.do_send(ChopstickMessage::Put(ctx.address())); //TODO: is do_send the best option here? is it blocking?
                     self.right.do_send(ChopstickMessage::Put(ctx.address()));
 
-                    let five_seconds = Duration::new(5, 0);
-                    ctx.notify_later(HakkerMessage::Eat, five_seconds);
+                    ctx.notify_later(HakkerMessage::Eat, five_seconds());
                     (Some(HakkerState::Thinking), ())
                 }
                 HakkerMessage::Eat => {
@@ -279,15 +288,18 @@ impl Message for HakkerMessage {
 fn main() {
     let system = actix::System::new("test");
 
-    let chopsticks: Vec<_> = (1..=5).map(|_| Chopstick::Available.start()).collect();
+    let number_of_chopstick = 20000;
 
-    let hakkers = ["Ghosh", "Boner", "Klang", "Krasser", "Manie"];
+    let chopsticks: Vec<_> = (1..=number_of_chopstick).map(|_| Chopstick::Available.start()).collect();
 
-    for i in 0..5 {
+//    let hakkers = ["Ghosh", "Boner", "Klang", "Krasser", "Manie"];
+    let hakkers = (1..=number_of_chopstick).map(|i| format!("hakker-{}", i)).collect::<Vec<_>>();
+
+    for i in 0..number_of_chopstick {
         let hakker = Hakker {
-            name: hakkers[i].to_owned(),
+            name: hakkers[i].clone(),
             left: chopsticks[i].clone(),
-            right: chopsticks[(i + 1) % 5].clone(),
+            right: chopsticks[(i + 1) % number_of_chopstick].clone(),
             state: HakkerState::Waiting,
         }.start();
 

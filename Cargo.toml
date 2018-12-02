@@ -6,3 +6,4 @@ authors = ["Yury Gribkov <yury.gribkov@gmail.com>"]
 [dependencies]
 actix = "0.7.7"
 futures = "0.1.25"
+rand = "0.6.1"
