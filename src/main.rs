@@ -24,8 +24,8 @@ fn ten_seconds() -> Duration {
 
 #[derive(Debug)]
 enum Chopstick {
-    Available,
-    TakenBy(Addr<Hakker>),
+    Available(String),
+    TakenBy(String, Addr<Hakker>),
 }
 
 /// Chopstick is an actor, it can be taken, and put back
@@ -41,7 +41,7 @@ enum ChopstickMessage {
 
 #[derive(Debug)]
 enum ChopstickAnswer {
-    Taken(Addr<Chopstick>),
+    Taken(String, Addr<Chopstick>),
     Busy,
     PutBack,
 }
@@ -54,18 +54,18 @@ impl Handler<ChopstickMessage> for Chopstick {
             // When a Chopstick is taken by a hakker
             // It will refuse to be taken by other hakkers
             // But the owning hakker can put it back
-            Chopstick::TakenBy(ref hakker) => match msg {
+            Chopstick::TakenBy(ref name, ref hakker) => match msg {
                 ChopstickMessage::Take(_) => (None, ChopstickAnswer::Busy),
                 ChopstickMessage::Put(ref sender) if sender == hakker => {
-                    (Some(Chopstick::Available), ChopstickAnswer::PutBack)
+                    (Some(Chopstick::Available(name.to_owned())), ChopstickAnswer::PutBack)
                 }
                 _ => unreachable!("Chopstick can't be put back by another hakker"),
             },
             // When a Chopstick is available, it can be taken by a hakker
-            Chopstick::Available => match msg {
+            Chopstick::Available(ref name) => match msg {
                 ChopstickMessage::Take(hakker) => (
-                    Some(Chopstick::TakenBy(hakker)),
-                    ChopstickAnswer::Taken(ctx.address()),
+                    Some(Chopstick::TakenBy(name.to_owned(), hakker)),
+                    ChopstickAnswer::Taken(name.to_owned(), ctx.address()),
                 ),
                 _ => unreachable!("Chopstick isn't taken"),
             },
@@ -82,9 +82,9 @@ impl Message for ChopstickMessage {
 }
 
 impl<A, M> MessageResponse<A, M> for ChopstickAnswer
-where
-    A: Actor,
-    M: Message<Result = ChopstickAnswer>,
+    where
+        A: Actor,
+        M: Message<Result=ChopstickAnswer>,
 {
     fn handle<R: ResponseChannel<M>>(self, ctx: &mut <A as Actor>::Context, tx: Option<R>) {
         if let Some(tx) = tx {
@@ -107,7 +107,7 @@ enum HakkerState {
     Thinking,
     Hungry,
     WaitingForOtherChopstick {
-        waiting_on: Addr<Chopstick>,
+        waiting_on: (String, Addr<Chopstick>),
         taken: Addr<Chopstick>,
     },
     Eating,
@@ -129,17 +129,17 @@ impl Handler<ChopstickAnswer> for Hakker {
     fn handle(&mut self, msg: ChopstickAnswer, ctx: &mut Self::Context) -> Self::Result {
         let new_state = match self.state {
             HakkerState::Hungry => match msg {
-                ChopstickAnswer::Taken(chopstick) => {
-                    let waiting_on = if self.left == chopstick {
+                ChopstickAnswer::Taken(name, chopstick) => {
+                    let waiting_on_addr = if self.left == chopstick {
                         self.right.clone()
                     } else if self.right == chopstick {
                         self.left.clone()
                     } else {
-                        unreachable!("Received unknown chopstick: {:?}", chopstick)
+                        unreachable!("Received unknown chopstick: {}", name)
                     };
                     // println!("taken first chopstick: {:?}", chopstick);
                     Some(HakkerState::WaitingForOtherChopstick {
-                        waiting_on,
+                        waiting_on: (name, waiting_on_addr),
                         taken: chopstick,
                     })
                 }
@@ -150,13 +150,15 @@ impl Handler<ChopstickAnswer> for Hakker {
             // and start eating, or the other chopstick was busy, and the hakker goes
             // back to think about how he should obtain his chopsticks :-)
             HakkerState::WaitingForOtherChopstick {
-                ref waiting_on,
+                waiting_on: (ref taken_name, ref waiting_on),
                 ref taken,
             } => match msg {
-                ChopstickAnswer::Taken(ref chopstick) if waiting_on == chopstick => {
+                ChopstickAnswer::Taken(ref name, ref chopstick) if waiting_on == chopstick => {
                     println!(
-                        "{} has picked up <chopstick> and <chopstick> and starts to eat",
-                        self.name
+                        "{} has picked up {} and {} and starts to eat",
+                        self.name,
+                        taken_name,
+                        name
                     );
                     // println!(
                     //     "{} has picked up {:?} and {:?} and starts to eat",
@@ -183,7 +185,7 @@ impl Handler<ChopstickAnswer> for Hakker {
                     ctx.notify_later(HakkerMessage::Eat, ten_seconds());
                     Some(HakkerState::Thinking)
                 }
-                ChopstickAnswer::Taken(chopstick) => {
+                ChopstickAnswer::Taken(_name, chopstick) => {
                     chopstick.do_send(ChopstickMessage::Put(ctx.address()));
 
                     ctx.notify_later(HakkerMessage::Eat, ten_seconds());
@@ -288,9 +290,11 @@ impl Message for HakkerMessage {
 fn main() {
     let system = actix::System::new("test");
 
-    let number_of_chopstick = 20000;
+    let number_of_chopstick = 20_000;
 
-    let chopsticks: Vec<_> = (1..=number_of_chopstick).map(|_| Chopstick::Available.start()).collect();
+    let chopsticks: Vec<_> = (1..=number_of_chopstick)
+        .map(|i| Chopstick::Available(format!("chopstick-{}", i)).start())
+        .collect();
 
 //    let hakkers = ["Ghosh", "Boner", "Klang", "Krasser", "Manie"];
     let hakkers = (1..=number_of_chopstick).map(|i| format!("hakker-{}", i)).collect::<Vec<_>>();
