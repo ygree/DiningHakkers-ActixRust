@@ -1,12 +1,7 @@
 extern crate actix;
-extern crate futures;
-extern crate rand;
 
 use actix::dev::*;
-// use actix::prelude::*;
-// use futures::{future, Future};
 use std::time::Duration;
-// use std::fmt::Error;
 
 fn five_seconds() -> Duration {
 //    Duration::new(5u64 + rand::random::<u64>() % 5, 0)
@@ -86,7 +81,7 @@ impl<A, M> MessageResponse<A, M> for ChopstickAnswer
         A: Actor,
         M: Message<Result=ChopstickAnswer>,
 {
-    fn handle<R: ResponseChannel<M>>(self, ctx: &mut <A as Actor>::Context, tx: Option<R>) {
+    fn handle<R: ResponseChannel<M>>(self, _ctx: &mut <A as Actor>::Context, tx: Option<R>) {
         if let Some(tx) = tx {
             tx.send(self);
         }
@@ -232,7 +227,7 @@ impl Handler<HakkerMessage> for Hakker {
                                     ctx.address()
                                         .send(m)
                                         .into_actor(act)
-                                        .then(|r, a, c| actix::fut::ok(()))
+                                        .then(|_r, _a, _c| actix::fut::ok(()))
                                 }
                                 _ => unimplemented!(), // actix::fut::ok(()) //ignore
                             }
@@ -247,7 +242,7 @@ impl Handler<HakkerMessage> for Hakker {
                                     ctx.address()
                                         .send(m)
                                         .into_actor(act)
-                                        .then(|r, a, c| actix::fut::ok(()))
+                                        .then(|_r, _a, _c| actix::fut::ok(()))
                                 }
                                 _ => unimplemented!(), // actix::fut::ok(()) //ignore
                             }

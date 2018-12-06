@@ -1,13 +1,4 @@
 [[package]]
-name = "DiningHakkers"
-version = "0.1.0"
-dependencies = [
- "actix 0.7.7 (registry+https://github.com/rust-lang/crates.io-index)",
- "futures 0.1.25 (registry+https://github.com/rust-lang/crates.io-index)",
- "rand 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "actix"
 version = "0.7.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -162,6 +153,15 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "cfg-if 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "dining_hakkers"
+version = "0.1.0"
+dependencies = [
+ "actix 0.7.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures 0.1.25 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
