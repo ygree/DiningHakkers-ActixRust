@@ -203,12 +203,12 @@ impl Handler<HakkerMessage> for Hakker {
     type Result = ();
 
     fn handle(&mut self, msg: HakkerMessage, ctx: &mut Self::Context) -> Self::Result {
-        let (new_state, resp) = match self.state {
+        match self.state {
             HakkerState::Waiting => match msg {
                 HakkerMessage::Think => {
                     println!("{} starts to think", self.name);
                     ctx.notify_later(HakkerMessage::Eat, five_seconds());
-                    (Some(HakkerState::Thinking), ())
+                    self.state = HakkerState::Thinking
                 }
                 _ => unreachable!("When waiting state Hakker can only start thinking."),
             },
@@ -247,7 +247,7 @@ impl Handler<HakkerMessage> for Hakker {
                             }
                         }).spawn(ctx);
 
-                    (Some(HakkerState::Hungry), ())
+                    self.state = HakkerState::Hungry
                 }
                 _ => unreachable!("When thinking hakker can only start eating, not thinking!"),
             },
@@ -261,19 +261,14 @@ impl Handler<HakkerMessage> for Hakker {
                     self.right.do_send(ChopstickMessage::Put(ctx.address()));
 
                     ctx.notify_later(HakkerMessage::Eat, five_seconds());
-                    (Some(HakkerState::Thinking), ())
+                    self.state = HakkerState::Thinking
                 }
                 HakkerMessage::Eat => {
                     unreachable!("When eating hakker can only start thinking, not eating!")
                 }
             },
-
             _ => unreachable!("Unexpected state"),
-        };
-        if let Some(ns) = new_state {
-            self.state = ns;
         }
-        resp
     }
 }
 
@@ -290,7 +285,6 @@ fn main() {
         .map(|i| Chopstick::Available(format!("chopstick-{}", i)).start())
         .collect();
 
-//    let hakkers = ["Ghosh", "Boner", "Klang", "Krasser", "Manie"];
     let hakkers = (1..=number_of_chopstick).map(|i| format!("hakker-{}", i)).collect::<Vec<_>>();
 
     for i in 0..number_of_chopstick {
