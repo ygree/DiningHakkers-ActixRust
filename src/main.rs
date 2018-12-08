@@ -45,32 +45,39 @@ impl Handler<ChopstickMessage> for Chopstick {
     type Result = ChopstickAnswer;
 
     fn handle(&mut self, msg: ChopstickMessage, ctx: &mut Self::Context) -> Self::Result {
-        let (new_state, result) = match self {
+        match self {
             // When a Chopstick is taken by a hakker
             // It will refuse to be taken by other hakkers
             // But the owning hakker can put it back
-            Chopstick::TakenBy(ref name, ref hakker) => match msg {
-                ChopstickMessage::Take(_) => (None, ChopstickAnswer::Busy),
+            Chopstick::TakenBy(name, hakker) => match msg {
+                ChopstickMessage::Take(_) => ChopstickAnswer::Busy,
                 ChopstickMessage::Put(ref sender) if sender == hakker => {
-                    (Some(Chopstick::Available(name.to_owned())), ChopstickAnswer::PutBack)
+                    *self = Chopstick::Available(name.to_owned());
+                    ChopstickAnswer::PutBack
                 }
                 _ => unreachable!("Chopstick can't be put back by another hakker"),
             },
             // When a Chopstick is available, it can be taken by a hakker
-            Chopstick::Available(ref name) => match msg {
-                ChopstickMessage::Take(hakker) => (
-                    Some(Chopstick::TakenBy(name.to_owned(), hakker)),
-                    ChopstickAnswer::Taken(name.to_owned(), ctx.address()),
-                ),
+            Chopstick::Available(name) => match msg {
+                ChopstickMessage::Take(hakker) => {
+                    let name = name.clone();
+                    *self = Chopstick::TakenBy(name.to_owned(), hakker);
+                    ChopstickAnswer::Taken(name, ctx.address())
+                }
                 _ => unreachable!("Chopstick isn't taken"),
             },
-        };
-        if let Some(ns) = new_state {
-            *self = ns;
         }
-        result
     }
 }
+
+// rust prior 2018 wouldn't compile next code
+//fn test() {
+//    let mut x = 5;
+//
+//    let y = &x;
+//
+//    let z = &mut x;
+//}
 
 impl Message for ChopstickMessage {
     type Result = ChopstickAnswer;
