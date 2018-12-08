@@ -129,7 +129,7 @@ impl Handler<ChopstickAnswer> for Hakker {
     type Result = ();
 
     fn handle(&mut self, msg: ChopstickAnswer, ctx: &mut Self::Context) -> Self::Result {
-        let new_state = match self.state {
+        match self.state {
             HakkerState::Hungry => match msg {
                 ChopstickAnswer::Taken(name, chopstick) => {
                     let waiting_on_addr = if self.left == chopstick {
@@ -139,13 +139,12 @@ impl Handler<ChopstickAnswer> for Hakker {
                     } else {
                         unreachable!("Received unknown chopstick: {}", name)
                     };
-                    // println!("taken first chopstick: {:?}", chopstick);
-                    Some(HakkerState::WaitingForOtherChopstick {
+                    self.state = HakkerState::WaitingForOtherChopstick {
                         waiting_on: (name, waiting_on_addr),
                         taken: chopstick,
-                    })
+                    }
                 }
-                ChopstickAnswer::Busy => Some(HakkerState::FirstChopstickDenied),
+                ChopstickAnswer::Busy => self.state = HakkerState::FirstChopstickDenied,
                 _ => unreachable!("Unexpected message in state Hungry"),
             },
             // When a hakker is waiting for the last chopstick it can either obtain it
@@ -162,20 +161,16 @@ impl Handler<ChopstickAnswer> for Hakker {
                         taken_name,
                         name
                     );
-                    // println!(
-                    //     "{} has picked up {:?} and {:?} and starts to eat",
-                    //     self.name, self.left, self.right
-                    // );
 
                     ctx.notify_later(HakkerMessage::Think, five_seconds());
 
-                    Some(HakkerState::Eating)
+                    self.state = HakkerState::Eating
                 }
                 ChopstickAnswer::Busy => {
                     taken.do_send(ChopstickMessage::Put(ctx.address()));
 
                     ctx.notify_later(HakkerMessage::Eat, ten_seconds());
-                    Some(HakkerState::Thinking)
+                    self.state = HakkerState::Thinking
                 }
                 _ => unreachable!("Unexpected message in state WaitingForOtherChopstick"),
             },
@@ -185,20 +180,17 @@ impl Handler<ChopstickAnswer> for Hakker {
             HakkerState::FirstChopstickDenied => match msg {
                 ChopstickAnswer::Busy => {
                     ctx.notify_later(HakkerMessage::Eat, ten_seconds());
-                    Some(HakkerState::Thinking)
+                    self.state = HakkerState::Thinking
                 }
                 ChopstickAnswer::Taken(_name, chopstick) => {
                     chopstick.do_send(ChopstickMessage::Put(ctx.address()));
 
                     ctx.notify_later(HakkerMessage::Eat, ten_seconds());
-                    Some(HakkerState::Thinking)
+                    self.state = HakkerState::Thinking
                 }
                 _ => unreachable!("Unexpected message in state FirstChopstickDenied"),
             },
-            _ => unimplemented!("TODO"),
-        };
-        if let Some(ns) = new_state {
-            self.state = ns;
+            _ => unreachable!("Unexpected state: {:?}", self.state),
         }
     }
 }
